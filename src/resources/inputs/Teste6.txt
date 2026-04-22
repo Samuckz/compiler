@@ -1,0 +1,13 @@
+class Teste6 {
+int a, b;
+float resultado;
+
+a := 10;
+b := 5;
+
+if (a > b and b >= 5) {
+    resultado := a + b;
+    write("Resultado: " + resultado);
+};
+
+}

@@ -16,7 +16,7 @@ public class Main {
         System.out.println("3 - Teste3.txt");
         System.out.println("4 - Teste4.txt");
         System.out.println("5 - Teste5.txt");
-        System.out.println("6 - Teste6.txt (ainda será criado)");
+        System.out.println("6 - Teste6.txt");
         System.out.print("Sua escolha: ");
         int escolha = scanner.nextInt();
         if (escolha < 1 || escolha > 6) {
