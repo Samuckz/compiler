@@ -107,7 +107,7 @@ public class LexicalAnalyser {
                 return readch(Consts.IGUAL) ? Word.le : new Token('<');
 
             case Consts.DOIS_PONTOS:
-                return readch(Consts.IGUAL) ? Word.morse : new Token(':');
+                return readch(Consts.IGUAL) ? Word.eq : new Token(':');
 
         }
 
