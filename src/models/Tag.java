@@ -1,13 +1,14 @@
 package models;
 
 public class Tag {
-    private Integer tag;
+    private int tag;
 
     public final static int
             //Palavras reservadas
             // Palavras reservadas da linguagem
             CLASS = 256,
             INT = 257,
+            DECIMAL = 271,
             STRING = 258,
             FLOAT = 259,
             IF = 260,
@@ -30,6 +31,7 @@ public class Tag {
             GE = 281,
             LE = 282,
             NE = 283,
+            MORSE = 289,
 
             //Outros tokens
             NUM = 284,

@@ -11,6 +11,7 @@ public class Word extends Token{
     public static final Word  ge = new Word (">=", Tag.GE);
     public static final Word  True = new Word ("true", Tag.TRUE);
     public static final Word  False = new Word ("false", Tag.FALSE);
+    public static final Word morse = new Word(":=", Tag.MORSE);
 
     public Word(String lexeme, Integer tag) {
         super(tag);

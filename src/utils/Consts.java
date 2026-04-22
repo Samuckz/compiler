@@ -23,4 +23,7 @@ public class Consts {
     public final static char FECHA_PARENTESES = ')';
     public final static char ABRE_CHAVES = '{';
     public final static char FECHA_CHAVES = '}';
+    public final static String INICIO_COMENTARIO = "/*";
+    public final static String FIM_COMENTARIO = "*/";
+    public final static char DOIS_PONTOS = ':';
 }

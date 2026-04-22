@@ -1,10 +1,12 @@
 package analyser;
 
+import models.Decimal;
 import models.Num;
 import models.Tag;
 import models.Token;
 import models.Word;
 import utils.Consts;
+import utils.exceptions.LexicalException;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -25,7 +27,7 @@ public class LexicalAnalyser {
             file = new FileReader(path);
         } catch (FileNotFoundException e) {
             System.out.println("File not found at: " + path);
-            throw new RuntimeException(e);
+            throw new LexicalException(e.getMessage());
         }
 
         initiateReservedWords();
@@ -42,7 +44,7 @@ public class LexicalAnalyser {
             this.ch = nextChar == -1 ? Consts.EOF : response;
         } catch (IOException e) {
             System.out.println("Error while reading file: " + e.getMessage());
-            throw new RuntimeException(e);
+            throw new LexicalException(e.getMessage());
         }
     }
 
@@ -56,32 +58,31 @@ public class LexicalAnalyser {
 
     }
 
-   public Token scan() {
-       // desconsidera delimitadores de entrada
-       try{
-            for(;; readCh()){
-                if(ch == Consts.EOF){
+    public Token scan() {
+        // desconsidera delimitadores de entrada
+        try {
+            for (;; readCh()) {
+                if (ch == Consts.EOF) {
                     return new Token(Tag.EOF);
-                } else if(ch == ' ' || ch == '\t' || ch == '\r'){
+                } else if (ch == ' ' || ch == '\t' || ch == '\r') {
                     continue;
-                } else if(ch == '\n'){
+                } else if (ch == '\n') {
                     currentLine++;
                 } else {
                     break;
                 }
             }
-        
-        Token token = getToken(ch);
-        System.out.println("Line " + currentLine + ": " + token);
-        return token;
+
+            Token token = getToken(ch);
+            System.out.println("Line " + currentLine + ": " + token);
+            return token;
         } catch (Exception e) {
             System.out.println("Error while reading file: " + e.getMessage());
-            throw new RuntimeException(e);
-        }   
+            throw new LexicalException(e.getMessage());
+        }
     }
 
     private Token getToken(char ch) {
-        // TODO: Verfificar se, para novos tokens, é preciso inserir na tabela de simbolos
         if (ch == Consts.EOF) {
             return new Token(Tag.EOF);
         }
@@ -104,16 +105,95 @@ public class LexicalAnalyser {
 
             case Consts.MENOR:
                 return readch(Consts.IGUAL) ? Word.le : new Token('<');
+
+            case Consts.DOIS_PONTOS:
+                return readch(Consts.IGUAL) ? Word.morse : new Token(':');
+
+        }
+
+        // se igual a "//" pular linha
+        if (this.ch == Consts.BARRA) {
+            readCh();
+            if (this.ch == Consts.BARRA) {
+                // Comentário de linha encontrado, ignora até o final da linha
+                while (this.ch != Consts.NEWLINE && this.ch != Consts.EOF) {
+                    readCh();
+                }
+                return scan(); // Após terminar o comentário, chama scan novamente para obter o próximo token
+            }
+            if (this.ch == Consts.ASTERISCO) {
+                // Comentário encontrado, ignora até o fim do comentário
+                while (true) {
+                    if (this.ch == Consts.EOF) {
+                        throw new LexicalException("Unterminated comment at line " + currentLine);
+                    }
+                    if (this.ch == Consts.FIM_COMENTARIO.charAt(0)) {
+                        readCh();
+                        if (this.ch == Consts.FIM_COMENTARIO.charAt(1)) {
+                            readCh(); // Consome o segundo caractere do fim do comentário
+                            break; // Sai do loop de comentário
+                        }
+                    } else {
+                        readCh(); // Continua lendo dentro do comentário
+                    }
+                }
+                return scan(); // Após terminar o comentário, chama scan novamente para obter o próximo token
+            } else {
+                return new Token(Consts.INICIO_COMENTARIO.charAt(0)); // Retorna o caractere '/' se não for um
+            }
+        }
+
+
+        // Valida String
+        if (ch == Consts.ASPAS) {
+            StringBuilder sb = new StringBuilder();
+            readCh();
+            while (this.ch != Consts.ASPAS && this.ch != Consts.EOF) {
+                sb.append(this.ch);
+                readCh();
+            }
+            if (this.ch == Consts.ASPAS) {
+                readCh(); // Consome a aspa de fechamento
+                return new Word(sb.toString(), Tag.STRING);
+            } else {
+                throw new LexicalException("Unterminated string literal at line " + currentLine);
+            }
         }
 
         // Se não começar com nenhum dos caracteres acima, verifica se é um número
         if (Character.isDigit(ch)) {
-            int value = 0;
+            int integerPart = 0;
+
+            // Lê a parte inteira
             do {
-                value = 10 * value + Character.digit(ch, 10);
+                integerPart = 10 * integerPart + Character.digit(ch, 10);
                 readCh();
             } while (Character.isDigit(this.ch));
-            return new Num(value);
+
+            // Verifica se existe parte decimal
+            if (this.ch == '.') {
+                readCh(); // Consome o ponto '.'
+
+                // Após o ponto, DEVE haver pelo menos um dígito
+                if (!Character.isDigit(this.ch)) {
+                    throw new NumberFormatException(
+                            "Número mal formatado: esperado dígito após '.', mas encontrou '" + this.ch + "'");
+                }
+
+                double decimalPart = 0.0;
+                double multiplier = 0.1;
+
+                // Lê a parte decimal
+                do {
+                    decimalPart += Character.digit(ch, 10) * multiplier;
+                    multiplier *= 0.1;
+                    readCh();
+                } while (Character.isDigit(this.ch));
+
+                return new Decimal(integerPart + decimalPart);
+            }
+
+            return new Num(integerPart);
         }
 
         // Identificadores e palavras reservadas
