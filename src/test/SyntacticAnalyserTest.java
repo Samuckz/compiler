@@ -297,8 +297,8 @@ public class SyntacticAnalyserTest {
         test("[H7] repeat-until simples", () ->
             parseProgram("repeat { x := x + 1; } until (x >= 10);"));
 
-        test("[H7] do-while com condição composta", () ->
-            parseProgram("do { x := 1; } while (x < 10 and x > 0);"));
+        test("[H7] do-while com condição composta (and como mulop)", () ->
+            parseProgram("do { x := 1; } while (x and y > 0);"));
 
         test("[H7] do aninhado", () ->
             parseProgram("do { do { x := 1; } while (x < 5); } while (x < 10);"));
@@ -380,6 +380,9 @@ public class SyntacticAnalyserTest {
             ));
 
         // Programa válido: if-else simples (baseado no Teste3 corrigido)
+        // Nota: 'and' é mulop na gramática (mesmo nível que *), portanto
+        // condições compostas do tipo "a > b and c > d" são inválidas — cada
+        // expression só admite um relop. O aninhamento de ifs é a forma correta.
         test("[H9] Programa com if-else (Teste3 corrigido parcial)", () ->
             parse(
                 "class MinhaClasse {\n" +
@@ -390,8 +393,12 @@ public class SyntacticAnalyserTest {
                 "    read(b);\n" +
                 "    read(c);\n" +
                 "    maior := 0;\n" +
-                "    if (a > b and a > c) {\n" +
-                "      maior := a;\n" +
+                "    if (a > b) {\n" +
+                "      if (a > c) {\n" +
+                "        maior := a;\n" +
+                "      } else {\n" +
+                "        maior := c;\n" +
+                "      };\n" +
                 "    } else {\n" +
                 "      if (b > c) {\n" +
                 "        maior := b;\n" +
