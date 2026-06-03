@@ -52,7 +52,6 @@ public class LexicalAnalyser {
             char response = (char) nextChar;
             this.ch = nextChar == -1 ? Consts.EOF : response;
         } catch (IOException e) {
-            System.out.println("Error while reading file: " + e.getMessage());
             throw new LexicalException(e.getMessage());
         }
     }

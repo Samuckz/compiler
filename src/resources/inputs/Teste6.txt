@@ -1,13 +1,25 @@
+// Teste 6 — Soma dos inteiros de 1 ate N
+// Demonstra: if-else, repeat-until e operacoes aritmeticas
+
 class Teste6 {
-int a, b;
-float resultado;
+    int n, i, soma;
+    {
+        write("Digite um numero inteiro positivo: ");
+        read(n);
 
-a := 10;
-b := 5;
-
-if (a > b and b >= 5) {
-    resultado := a + b;
-    write("Resultado: " + resultado);
-};
-
+        if (n > 0) {
+            soma := 0;
+            i := 1;
+            repeat {
+                soma := soma + i;
+                i := i + 1;
+            } until (i > n);
+            write("A soma de 1 ate ");
+            write(n);
+            write(" e: ");
+            write(soma);
+        } else {
+            write("Numero invalido. Digite um valor maior que zero.");
+        };
+    }
 }
