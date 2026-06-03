@@ -4,11 +4,9 @@ public class Tag {
     private int tag;
 
     public final static int
-            //Palavras reservadas
-            // Palavras reservadas da linguagem
+            // Palavras reservadas
             CLASS = 256,
             INT = 257,
-            DECIMAL = 271,
             STRING = 258,
             FLOAT = 259,
             IF = 260,
@@ -23,20 +21,36 @@ public class Tag {
             OR = 269,
             AND = 270,
 
-            // Operadores e pontuação
+            // Operadores compostos (múltiplos caracteres)
+            ASSIGN = 280,   // :=
+            GE = 281,       // >=
+            LE = 282,       // <=
+            NE = 283,       // <>
 
-
-            //Operadores e pontuação
-            EQ = 280,
-            GE = 281,
-            LE = 282,
-            NE = 283,
-            MORSE = 289,
-
-            //Outros tokens
+            // Literais e identificadores
             NUM = 284,
             ID = 285,
             TRUE = 286,
-            FALSE  = 287,
-            EOF = 288;
+            FALSE = 287,
+            EOF = 288,
+            REAL = 289,     // constante real (ex: 3.14)
+
+            // Operadores de um caractere (valor = código ASCII)
+            PLUS     = '+',  // 43
+            MINUS    = '-',  // 45
+            TIMES    = '*',  // 42
+            DIVIDE   = '/',  // 47
+            MOD      = '%',  // 37
+            EQUAL    = '=',  // 61  (operador relacional de igualdade)
+            LT       = '<',  // 60
+            GT       = '>',  // 62
+
+            // Pontuação de um caractere
+            LPAREN    = '(',  // 40
+            RPAREN    = ')',  // 41
+            LBRACE    = '{',  // 123
+            RBRACE    = '}',  // 125
+            SEMICOLON = ';',  // 59
+            COMMA     = ',',  // 44
+            COLON     = ':';  // 58
 }

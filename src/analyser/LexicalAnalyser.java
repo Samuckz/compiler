@@ -11,17 +11,18 @@ import utils.exceptions.LexicalException;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.Reader;
 import java.nio.file.Path;
 import java.util.Hashtable;
 
 public class LexicalAnalyser {
     private int currentLine = 1;
     private char ch = Consts.ESPACO;
-    private FileReader file;
+    private Reader file;
 
     private final Hashtable<String, Word> words = new Hashtable<>();
 
-    public LexicalAnalyser(String filename) throws FileNotFoundException {
+    public LexicalAnalyser(String filename) {
         String path = Path.of("src", "resources", "inputs", filename).toString();
         try {
             file = new FileReader(path);
@@ -29,8 +30,16 @@ public class LexicalAnalyser {
             System.out.println("File not found at: " + path);
             throw new LexicalException(e.getMessage());
         }
-
         initiateReservedWords();
+    }
+
+    public LexicalAnalyser(Reader reader) {
+        this.file = reader;
+        initiateReservedWords();
+    }
+
+    public int getCurrentLine() {
+        return currentLine;
     }
 
     private void reserve(Word word) {
@@ -73,9 +82,7 @@ public class LexicalAnalyser {
                 }
             }
 
-            Token token = getToken(ch);
-            System.out.println("Line " + currentLine + ": " + token);
-            return token;
+            return getToken(ch);
         } catch (Exception e) {
             System.out.println("Error while reading file: " + e.getMessage());
             throw new LexicalException(e.getMessage());
@@ -95,19 +102,26 @@ public class LexicalAnalyser {
                 return readch(Consts.PIPE) ? Word.or : new Token('|');
 
             case Consts.IGUAL:
-                return readch(Consts.IGUAL) ? Word.eq : new Token('=');
-
-            case Consts.EXCLAMACAO:
-                return readch(Consts.IGUAL) ? Word.ne : new Token('!');
+                this.ch = Consts.ESPACO;
+                return new Token(Tag.EQUAL);
 
             case Consts.MAIOR:
-                return readch(Consts.IGUAL) ? Word.ge : new Token('>');
+                return readch(Consts.IGUAL) ? Word.ge : new Token(Tag.GT);
 
             case Consts.MENOR:
-                return readch(Consts.IGUAL) ? Word.le : new Token('<');
+                readCh();
+                if (this.ch == Consts.IGUAL) {
+                    this.ch = Consts.ESPACO;
+                    return Word.le;
+                }
+                if (this.ch == Consts.MAIOR) {
+                    this.ch = Consts.ESPACO;
+                    return Word.ne;
+                }
+                return new Token(Tag.LT);
 
             case Consts.DOIS_PONTOS:
-                return readch(Consts.IGUAL) ? Word.eq : new Token(':');
+                return readch(Consts.IGUAL) ? Word.eq : new Token(Tag.COLON);
 
         }
 
@@ -127,14 +141,17 @@ public class LexicalAnalyser {
                     if (this.ch == Consts.EOF) {
                         throw new LexicalException("Unterminated comment at line " + currentLine);
                     }
-                    if (this.ch == Consts.FIM_COMENTARIO.charAt(0)) {
+                    if (this.ch == Consts.NEWLINE) {
+                        currentLine++;
+                        readCh();
+                    } else if (this.ch == Consts.FIM_COMENTARIO.charAt(0)) {
                         readCh();
                         if (this.ch == Consts.FIM_COMENTARIO.charAt(1)) {
-                            readCh(); // Consome o segundo caractere do fim do comentário
-                            break; // Sai do loop de comentário
+                            readCh();
+                            break;
                         }
                     } else {
-                        readCh(); // Continua lendo dentro do comentário
+                        readCh();
                     }
                 }
                 return scan(); // Após terminar o comentário, chama scan novamente para obter o próximo token
@@ -162,13 +179,13 @@ public class LexicalAnalyser {
 
         // Se não começar com nenhum dos caracteres acima, verifica se é um número
         if (Character.isDigit(ch)) {
-            int integerPart = 0;
-
-            // Lê a parte inteira
-            do {
-                integerPart = 10 * integerPart + Character.digit(ch, 10);
+            // Primeiro dígito já está em `ch` (parâmetro); os seguintes ficam em `this.ch`
+            int integerPart = Character.digit(ch, 10);
+            readCh();
+            while (Character.isDigit(this.ch)) {
+                integerPart = 10 * integerPart + Character.digit(this.ch, 10);
                 readCh();
-            } while (Character.isDigit(this.ch));
+            }
 
             // Verifica se existe parte decimal
             if (this.ch == '.') {
@@ -182,13 +199,11 @@ public class LexicalAnalyser {
 
                 double decimalPart = 0.0;
                 double multiplier = 0.1;
-
-                // Lê a parte decimal
-                do {
-                    decimalPart += Character.digit(ch, 10) * multiplier;
+                while (Character.isDigit(this.ch)) {
+                    decimalPart += Character.digit(this.ch, 10) * multiplier;
                     multiplier *= 0.1;
                     readCh();
-                } while (Character.isDigit(this.ch));
+                }
 
                 return new Decimal(integerPart + decimalPart);
             }
