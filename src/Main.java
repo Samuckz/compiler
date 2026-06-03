@@ -30,7 +30,8 @@ public class Main {
             Token token;
             do {
                 token = lexer.scan();
-                if(token.getTag().equals(Tag.ID)){
+                System.out.println("Line " + lexer.getCurrentLine() + ": " + token);
+                if (token.getTag().equals(Tag.ID)) {
                     Environment.put(token, token.getTag());
                 }
             } while (token.getTag() != Tag.EOF);
