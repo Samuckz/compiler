@@ -23,12 +23,20 @@ public class LexicalAnalyser {
     private final Hashtable<String, Word> words = new Hashtable<>();
 
     public LexicalAnalyser(String filename) {
-        String path = Path.of("src", "resources", "inputs", filename).toString();
-        try {
-            file = new FileReader(path);
-        } catch (FileNotFoundException e) {
-            System.out.println("File not found at: " + path);
-            throw new LexicalException(e.getMessage());
+        // Tenta carregar o arquivo como recurso do classpath (dentro do JAR)
+        String resourcePath = "/inputs/" + filename;
+        java.io.InputStream is = LexicalAnalyser.class.getResourceAsStream(resourcePath);
+        if (is != null) {
+            file = new java.io.InputStreamReader(is);
+        } else {
+            // Fallback: tenta carregar do sistema de arquivos
+            String path = Path.of("src", "resources", "inputs", filename).toString();
+            try {
+                file = new FileReader(path);
+            } catch (FileNotFoundException e) {
+                System.out.println("Arquivo não encontrado: " + filename);
+                throw new LexicalException(e.getMessage());
+            }
         }
         initiateReservedWords();
     }
