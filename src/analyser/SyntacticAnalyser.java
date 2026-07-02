@@ -1,7 +1,11 @@
 package analyser;
 
+import codegen.CodeGenerator;
+import config.Symbol;
 import config.SymbolTable;
 import config.Type;
+import models.Decimal;
+import models.Num;
 import models.Tag;
 import models.Token;
 import models.Word;
@@ -13,11 +17,13 @@ public class SyntacticAnalyser {
     private final LexicalAnalyser lexer;
     private Token currentToken;
     private final SymbolTable symbolTable;
+    private final CodeGenerator codeGen;
     private boolean hasSemanticErrors = false;
 
     public SyntacticAnalyser(LexicalAnalyser lexer) {
-        this.lexer = lexer;
+        this.lexer       = lexer;
         this.symbolTable = new SymbolTable(null);
+        this.codeGen     = new CodeGenerator();
         advance();
     }
 
@@ -99,7 +105,9 @@ public class SyntacticAnalyser {
         eat(Tag.EOF);
     }
 
-    public SymbolTable getSymbolTable() { return symbolTable; }
+    public SymbolTable   getSymbolTable()   { return symbolTable; }
+    public CodeGenerator getCodeGenerator() { return codeGen; }
+    public boolean       hasSemanticErrors(){ return hasSemanticErrors; }
 
     // -------------------------------------------------------------------------
     // Helpers
@@ -132,16 +140,26 @@ public class SyntacticAnalyser {
             || t == Tag.LE || t == Tag.NE || t == Tag.EQUAL;
     }
 
+    private String semanticError(String message) {
+        System.out.println("Erro semântico na linha " + lexer.getCurrentLine() + ": " + message);
+        hasSemanticErrors = true;
+        return Type.ERROR;
+    }
+
     // -------------------------------------------------------------------------
     // P1 — program ::= class identifier "{" [decl-list] body "}"
     // -------------------------------------------------------------------------
 
     private void program() {
         eat(Tag.CLASS);
+        String className = ((Word) currentToken).getLexeme();
         eat(Tag.ID);
         eat(Tag.LBRACE);
         if (isType()) declList();
+        // Header emitted after declarations so we know the number of variable slots
+        codeGen.emitHeader(className);
         body();
+        codeGen.emitFooter();
         eat(Tag.RBRACE);
     }
 
@@ -185,19 +203,12 @@ public class SyntacticAnalyser {
         eat(Tag.ID);
         try {
             symbolTable.insert(lexeme, "variable", typeName, line);
+            codeGen.allocVar(lexeme, typeName);
         } catch (SemanticException e) {
             System.out.println(e.getMessage());
             hasSemanticErrors = true;
         }
     }
-
-    private String semanticError(String message) {
-        System.out.println("Erro semântico na linha " + lexer.getCurrentLine() + ": " + message);
-        hasSemanticErrors = true;
-        return Type.ERROR;
-    }
-
-    public boolean hasSemanticErrors() { return hasSemanticErrors; }
 
     // -------------------------------------------------------------------------
     // P5 — type ::= int | string | float
@@ -260,12 +271,11 @@ public class SyntacticAnalyser {
 
     private String assignStmt() {
         String lexeme = ((Word) currentToken).getLexeme();
-        int line = lexer.getCurrentLine();
         eat(Tag.ID);
         eat(Tag.ASSIGN);
-        String exprType = simpleExpr();
+        String exprType = simpleExpr();   // emits expression code → value on stack
 
-        config.Symbol sym = symbolTable.lookup(lexeme);
+        Symbol sym = symbolTable.lookup(lexeme);
         if (sym == null) {
             semanticError("variável '" + lexeme + "' não declarada");
             return Type.ERROR;
@@ -275,6 +285,7 @@ public class SyntacticAnalyser {
                     + "' é do tipo '" + sym.getType() + "', expressão é do tipo '" + exprType + "'");
             return Type.ERROR;
         }
+        codeGen.emitStore(lexeme, sym.getType());
         return Type.VOID;
     }
 
@@ -283,14 +294,19 @@ public class SyntacticAnalyser {
     // -------------------------------------------------------------------------
 
     private String ifStmt() {
+        String lElse = codeGen.newLabel();
+        String lEnd  = codeGen.newLabel();
+
         eat(Tag.IF);
         eat(Tag.LPAREN);
-        condition();
+        condition();                        // emits condition → 0 or 1 on stack
         eat(Tag.RPAREN);
+        codeGen.emit("ifeq " + lElse);     // if false → jump to else/end
+
         eat(Tag.LBRACE);
         stmtList();
         eat(Tag.RBRACE);
-        ifStmtPrime();
+        ifStmtPrime(lElse, lEnd);
         return Type.VOID;
     }
 
@@ -298,16 +314,20 @@ public class SyntacticAnalyser {
     // P11 — if-stmt' ::= else "{" stmt-list "}" | λ
     // -------------------------------------------------------------------------
 
-    private void ifStmtPrime() {
+    private void ifStmtPrime(String lElse, String lEnd) {
         switch (currentToken.getTag()) {
             case Tag.ELSE:
+                codeGen.emit("goto " + lEnd);
+                codeGen.emitLabel(lElse);
                 eat(Tag.ELSE);
                 eat(Tag.LBRACE);
                 stmtList();
                 eat(Tag.RBRACE);
+                codeGen.emitLabel(lEnd);
                 break;
             case Tag.SEMICOLON:
-                break; // λ
+                codeGen.emitLabel(lElse);   // λ — no else branch
+                break;
             default:
                 throw new SyntacticException(
                     "Erro sintático na linha " + lexer.getCurrentLine()
@@ -321,11 +341,14 @@ public class SyntacticAnalyser {
     // -------------------------------------------------------------------------
 
     private String doStmt() {
+        String lStart = codeGen.newLabel();
+        codeGen.emitLabel(lStart);
+
         eat(Tag.DO);
         eat(Tag.LBRACE);
         stmtList();
         eat(Tag.RBRACE);
-        doSuffix();
+        doSuffix(lStart);
         return Type.VOID;
     }
 
@@ -333,11 +356,12 @@ public class SyntacticAnalyser {
     // P13 — do-suffix ::= while "(" condition ")"
     // -------------------------------------------------------------------------
 
-    private void doSuffix() {
+    private void doSuffix(String lStart) {
         eat(Tag.WHILE);
         eat(Tag.LPAREN);
-        condition();
+        condition();                        // emits condition → 0 or 1 on stack
         eat(Tag.RPAREN);
+        codeGen.emit("ifne " + lStart);    // if true → loop back
     }
 
     // -------------------------------------------------------------------------
@@ -345,11 +369,14 @@ public class SyntacticAnalyser {
     // -------------------------------------------------------------------------
 
     private String repeatStmt() {
+        String lStart = codeGen.newLabel();
+        codeGen.emitLabel(lStart);
+
         eat(Tag.REPEAT);
         eat(Tag.LBRACE);
         stmtList();
         eat(Tag.RBRACE);
-        stmtSuffix();
+        stmtSuffix(lStart);
         return Type.VOID;
     }
 
@@ -357,11 +384,12 @@ public class SyntacticAnalyser {
     // P15 — stmt-suffix ::= until "(" condition ")"
     // -------------------------------------------------------------------------
 
-    private void stmtSuffix() {
+    private void stmtSuffix(String lStart) {
         eat(Tag.UNTIL);
         eat(Tag.LPAREN);
-        condition();
+        condition();                        // emits condition → 0 or 1 on stack
         eat(Tag.RPAREN);
+        codeGen.emit("ifeq " + lStart);    // if false (until condition not met) → loop back
     }
 
     // -------------------------------------------------------------------------
@@ -373,11 +401,13 @@ public class SyntacticAnalyser {
         eat(Tag.LPAREN);
         String lexeme = ((Word) currentToken).getLexeme();
         eat(Tag.ID);
-        if (symbolTable.lookup(lexeme) == null) {
+        Symbol sym = symbolTable.lookup(lexeme);
+        if (sym == null) {
             semanticError("variável '" + lexeme + "' não declarada");
             eat(Tag.RPAREN);
             return Type.ERROR;
         }
+        codeGen.emitRead(lexeme, sym.getType());
         eat(Tag.RPAREN);
         return Type.VOID;
     }
@@ -389,7 +419,9 @@ public class SyntacticAnalyser {
     private String writeStmt() {
         eat(Tag.WRITE);
         eat(Tag.LPAREN);
-        writable();
+        codeGen.emit("getstatic java/lang/System/out Ljava/io/PrintStream;");
+        String t = writable();              // emits expression → value on stack
+        codeGen.emitPrintln(t.equals(Type.ERROR) ? Type.INT : t);
         eat(Tag.RPAREN);
         return Type.VOID;
     }
@@ -428,14 +460,17 @@ public class SyntacticAnalyser {
 
     private String expressionPrime(String leftType) {
         if (isRelop()) {
-            relop();
+            String op    = relop();
             String right = simpleExpr();
             String result = Type.resultOfRelop(leftType, right);
             if (result.equals(Type.ERROR) && !leftType.equals(Type.ERROR) && !right.equals(Type.ERROR)) {
                 semanticError("operador relacional aplicado a tipos incompatíveis: '"
                         + leftType + "' e '" + right + "'");
+                return Type.ERROR;
             }
-            return result;
+            String opType = leftType.equals(Type.ERROR) ? Type.INT : leftType;
+            codeGen.emitRelop(op, opType);
+            return Type.BOOL;
         }
         return leftType; // λ
     }
@@ -455,22 +490,26 @@ public class SyntacticAnalyser {
 
     private String simpleExprPrime(String leftType) {
         if (isAddop()) {
-            String op = addop();
+            String op    = addop();
             String right = term();
             String result;
+
             if (op.equals("or")) {
-                if (!leftType.equals(Type.BOOL) && !leftType.equals(Type.ERROR)) {
+                if (!leftType.equals(Type.BOOL) && !leftType.equals(Type.ERROR))
                     semanticError("operador 'or' requer operandos lógicos, mas encontrou '" + leftType + "'");
-                }
-                if (!right.equals(Type.BOOL) && !right.equals(Type.ERROR)) {
+                if (!right.equals(Type.BOOL) && !right.equals(Type.ERROR))
                     semanticError("operador 'or' requer operandos lógicos, mas encontrou '" + right + "'");
-                }
+                codeGen.emitOr();
                 result = Type.BOOL;
             } else {
                 result = Type.resultOfAddition(leftType, right);
                 if (result.equals(Type.ERROR) && !leftType.equals(Type.ERROR) && !right.equals(Type.ERROR)) {
                     semanticError("operador '" + op + "' incompatível com tipos '"
                             + leftType + "' e '" + right + "'");
+                }
+                if (!leftType.equals(Type.ERROR) && !right.equals(Type.ERROR)) {
+                    if (op.equals("+")) codeGen.emitAdd(leftType);
+                    else                codeGen.emitSub(leftType.equals(Type.FLOAT) ? Type.FLOAT : Type.INT);
                 }
             }
             return simpleExprPrime(result);
@@ -493,22 +532,29 @@ public class SyntacticAnalyser {
 
     private String termPrime(String leftType) {
         if (isMulop()) {
-            String op = mulop();
+            String op    = mulop();
             String right = factorA();
             String result;
+
             if (op.equals("and")) {
-                if (!leftType.equals(Type.BOOL) && !leftType.equals(Type.ERROR)) {
+                if (!leftType.equals(Type.BOOL) && !leftType.equals(Type.ERROR))
                     semanticError("operador 'and' requer operandos lógicos, mas encontrou '" + leftType + "'");
-                }
-                if (!right.equals(Type.BOOL) && !right.equals(Type.ERROR)) {
+                if (!right.equals(Type.BOOL) && !right.equals(Type.ERROR))
                     semanticError("operador 'and' requer operandos lógicos, mas encontrou '" + right + "'");
-                }
+                codeGen.emitAnd();
                 result = Type.BOOL;
             } else {
                 result = Type.resultOfMultiplication(leftType, right, op);
                 if (result.equals(Type.ERROR) && !leftType.equals(Type.ERROR) && !right.equals(Type.ERROR)) {
                     semanticError("operador '" + op + "' incompatível com tipos '"
                             + leftType + "' e '" + right + "'");
+                }
+                if (!leftType.equals(Type.ERROR) && !right.equals(Type.ERROR)) {
+                    switch (op) {
+                        case "*": codeGen.emitMul(leftType.equals(Type.FLOAT) ? Type.FLOAT : Type.INT); break;
+                        case "/": codeGen.emitDiv(leftType, right); break;
+                        case "%": codeGen.emitMod(); break;
+                    }
                 }
             }
             return termPrime(result);
@@ -525,17 +571,17 @@ public class SyntacticAnalyser {
             case Tag.NOT: {
                 eat(Tag.NOT);
                 String t = factor();
-                if (!t.equals(Type.BOOL) && !t.equals(Type.ERROR)) {
+                if (!t.equals(Type.BOOL) && !t.equals(Type.ERROR))
                     return semanticError("operador 'not' requer tipo lógico, mas encontrou '" + t + "'");
-                }
+                codeGen.emitNot();
                 return Type.BOOL;
             }
             case Tag.MINUS: {
                 eat(Tag.MINUS);
                 String t = factor();
-                if (!Type.isNumeric(t) && !t.equals(Type.ERROR)) {
+                if (!Type.isNumeric(t) && !t.equals(Type.ERROR))
                     return semanticError("operador '-' unário requer tipo numérico, mas encontrou '" + t + "'");
-                }
+                if (!t.equals(Type.ERROR)) codeGen.emitNeg(t);
                 return t;
             }
             default:
@@ -551,23 +597,31 @@ public class SyntacticAnalyser {
         switch (currentToken.getTag()) {
             case Tag.ID: {
                 String lexeme = ((Word) currentToken).getLexeme();
-                int line = lexer.getCurrentLine();
                 eat(Tag.ID);
-                config.Symbol sym = symbolTable.lookup(lexeme);
-                if (sym == null) {
+                Symbol sym = symbolTable.lookup(lexeme);
+                if (sym == null)
                     return semanticError("variável '" + lexeme + "' não declarada");
-                }
+                codeGen.emitLoad(lexeme, sym.getType());
                 return sym.getType();
             }
-            case Tag.NUM:
+            case Tag.NUM: {
+                int val = ((Num) currentToken).getValue();
                 eat(Tag.NUM);
+                codeGen.emitIntConst(val);
                 return Type.INT;
-            case Tag.REAL:
+            }
+            case Tag.REAL: {
+                double val = ((Decimal) currentToken).getValue();
                 eat(Tag.REAL);
+                codeGen.emitFloatConst(val);
                 return Type.FLOAT;
-            case Tag.STRING:
+            }
+            case Tag.STRING: {
+                String lexeme = ((Word) currentToken).getLexeme();
                 eat(Tag.STRING);
+                codeGen.emitStringConst(lexeme);
                 return Type.STRING;
+            }
             case Tag.LPAREN: {
                 eat(Tag.LPAREN);
                 String t = expression();
@@ -586,14 +640,14 @@ public class SyntacticAnalyser {
     // P28 — relop ::= ">" | ">=" | "<" | "<=" | "<>" | "="
     // -------------------------------------------------------------------------
 
-    private void relop() {
+    private String relop() {
         switch (currentToken.getTag()) {
-            case Tag.GT:    eat(Tag.GT);    break;
-            case Tag.GE:    eat(Tag.GE);    break;
-            case Tag.LT:    eat(Tag.LT);    break;
-            case Tag.LE:    eat(Tag.LE);    break;
-            case Tag.NE:    eat(Tag.NE);    break;
-            case Tag.EQUAL: eat(Tag.EQUAL); break;
+            case Tag.GT:    eat(Tag.GT);    return ">";
+            case Tag.GE:    eat(Tag.GE);    return ">=";
+            case Tag.LT:    eat(Tag.LT);    return "<";
+            case Tag.LE:    eat(Tag.LE);    return "<=";
+            case Tag.NE:    eat(Tag.NE);    return "<>";
+            case Tag.EQUAL: eat(Tag.EQUAL); return "=";
             default: throw new SyntacticException(errorMsg(Tag.GT));
         }
     }

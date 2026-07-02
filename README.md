@@ -8,7 +8,7 @@ Prof.ª Kecia Marques — 2026/1
 
 ## Objetivo
 
-Este repositório contém a implementação de um compilador para uma linguagem de programação definida pela disciplina de Compiladores. O compilador é desenvolvido em etapas ao longo do semestre, cobrindo as fases de análise léxica, análise sintática e, futuramente, análise semântica e geração de código.
+Este repositório contém a implementação de um compilador para uma linguagem de programação definida pela disciplina de Compiladores. O compilador cobre as fases de análise léxica, análise sintática, análise semântica e geração de código (Jasmin/JVM).
 
 ---
 
@@ -28,12 +28,17 @@ compiler/
 │   │   ├── Num.java                       # Tokens de constantes inteiras
 │   │   └── Decimal.java                   # Tokens de constantes reais
 │   ├── config/
-│   │   └── Environment.java               # Tabela de símbolos
+│   │   ├── Symbol.java                    # Representa um símbolo na tabela
+│   │   ├── SymbolTable.java               # Tabela de símbolos com escopo encadeado
+│   │   └── Type.java                      # Constantes e regras de tipos
+│   ├── codegen/
+│   │   └── CodeGenerator.java             # Gerador de código Jasmin (JVM)
 │   ├── utils/
 │   │   ├── Consts.java                    # Constantes de caracteres
 │   │   └── exceptions/
 │   │       ├── LexicalException.java      # Exceção de erro léxico
-│   │       └── SyntacticException.java    # Exceção de erro sintático
+│   │       ├── SyntacticException.java    # Exceção de erro sintático
+│   │       └── SemanticException.java     # Exceção de erro semântico
 │   ├── resources/
 │   │   └── inputs/
 │   │       ├── Teste1.txt                 # Arquivo de teste 1
@@ -49,7 +54,8 @@ compiler/
 │       ├── tabela-transicoes.md           # Tabela de transições do parser
 │       └── historias.md                   # Histórias de desenvolvimento (TDD)
 ├── out/                                   # Classes compiladas (gerado automaticamente)
-└── compiler.jar                           # JAR executável
+├── compiler.jar                           # JAR executável do compilador
+└── jasmin.jar                             # Montador Jasmin (converte .j em .class)
 ```
 
 ---
@@ -71,6 +77,12 @@ Responsável por verificar se a sequência de tokens respeita a gramática da li
 - Estruturas de repetição (`do-while`, `repeat-until`)
 - Comandos de entrada e saída (`read`, `write`)
 - Expressões aritméticas e relacionais com precedência correta
+
+### Etapa 3 — Analisador Semântico e Geração de Código
+Implementado via **Tradução Dirigida pela Sintaxe (SDT)** — as ações semânticas e de geração de código estão embutidas diretamente nos métodos do parser, sem construção de AST separada.
+
+- **Análise semântica:** tabela de símbolos com escopo encadeado, verificação de tipos, detecção de variáveis não declaradas e redeclarações
+- **Geração de código:** produz código **Jasmin** (assembly JVM) que é montado para bytecode `.class` executável diretamente pela JVM
 
 ---
 
@@ -114,13 +126,41 @@ java -cp out test.SyntacticAnalyserTest
 
 ---
 
+## Executando o programa gerado
+
+Após a compilação bem-sucedida, o compilador gera um arquivo `.j` (Jasmin assembly) na pasta do projeto. Para executar o programa compilado, siga os passos abaixo no terminal (`cmd.exe`):
+
+**1. Converta o `.j` para `.class` com o Jasmin:**
+```
+java -jar jasmin.jar Teste6.j
+```
+
+**2. Execute o programa gerado:**
+```
+java Teste6
+```
+
+> O Jasmin só é necessário nesse passo intermediário. O `.class` gerado é bytecode JVM padrão e roda diretamente com `java`.
+
+---
+
 ## Saída esperada
 
-**Programa válido:**
+**Programa válido (com geração de código):**
 ```
 Compilando: Teste6.txt
 ----------------------------------------
 Compilação concluída com sucesso.
+Código Jasmin gerado: Teste6.j
+Para executar: java -jar jasmin.jar Teste6.j
+```
+
+**Programa com erro semântico:**
+```
+Compilando: Teste3.txt
+----------------------------------------
+Erro semântico na linha 5: variável 'x' não declarada
+Compilação encerrada com erros semânticos.
 ```
 
 **Programa com erro léxico:**

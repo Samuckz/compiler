@@ -33,7 +33,11 @@ public class Main {
                 System.out.println("----------------------------------------");
                 System.out.println("Compilação encerrada com erros semânticos.");
             } else {
+                String outFile = parser.getCodeGenerator().getOutputFilename();
+                parser.getCodeGenerator().saveToFile(outFile);
                 System.out.println("Compilação concluída com sucesso.");
+                System.out.println("Código Jasmin gerado: " + outFile);
+                System.out.println("Para executar: java -jar jasmin.jar " + outFile);
             }
         } catch (LexicalException e) {
             System.out.println(e.getMessage());
@@ -41,6 +45,8 @@ public class Main {
         } catch (SyntacticException e) {
             System.out.println(e.getMessage());
             System.out.println("Compilação encerrada com erros sintáticos.");
+        } catch (java.io.IOException e) {
+            System.out.println("Erro ao salvar arquivo de saída: " + e.getMessage());
         }
     }
 }
