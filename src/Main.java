@@ -1,6 +1,7 @@
 import analyser.LexicalAnalyser;
 import analyser.SyntacticAnalyser;
 import utils.exceptions.LexicalException;
+import utils.exceptions.SemanticException;
 import utils.exceptions.SyntacticException;
 
 import java.util.Scanner;
@@ -28,11 +29,18 @@ public class Main {
             LexicalAnalyser lexer = new LexicalAnalyser(fileName);
             SyntacticAnalyser parser = new SyntacticAnalyser(lexer);
             parser.analyse();
-            System.out.println("Compilação concluída com sucesso.");
+            if (parser.hasSemanticErrors()) {
+                System.out.println("----------------------------------------");
+                System.out.println("Compilação encerrada com erros semânticos.");
+            } else {
+                System.out.println("Compilação concluída com sucesso.");
+            }
         } catch (LexicalException e) {
-            System.out.println("Erro léxico: " + e.getMessage());
+            System.out.println(e.getMessage());
+            System.out.println("Compilação encerrada com erros léxicos.");
         } catch (SyntacticException e) {
-            System.out.println("Erro sintático: " + e.getMessage());
+            System.out.println(e.getMessage());
+            System.out.println("Compilação encerrada com erros sintáticos.");
         }
     }
 }

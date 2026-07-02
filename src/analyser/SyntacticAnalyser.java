@@ -13,6 +13,7 @@ public class SyntacticAnalyser {
     private final LexicalAnalyser lexer;
     private Token currentToken;
     private final SymbolTable symbolTable;
+    private boolean hasSemanticErrors = false;
 
     public SyntacticAnalyser(LexicalAnalyser lexer) {
         this.lexer = lexer;
@@ -185,14 +186,18 @@ public class SyntacticAnalyser {
         try {
             symbolTable.insert(lexeme, "variable", typeName, line);
         } catch (SemanticException e) {
-            System.err.println(e.getMessage());
+            System.out.println(e.getMessage());
+            hasSemanticErrors = true;
         }
     }
 
     private String semanticError(String message) {
-        System.err.println("Erro semântico na linha " + lexer.getCurrentLine() + ": " + message);
+        System.out.println("Erro semântico na linha " + lexer.getCurrentLine() + ": " + message);
+        hasSemanticErrors = true;
         return Type.ERROR;
     }
+
+    public boolean hasSemanticErrors() { return hasSemanticErrors; }
 
     // -------------------------------------------------------------------------
     // P5 — type ::= int | string | float
