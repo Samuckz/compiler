@@ -152,6 +152,8 @@ public class SyntacticAnalyser {
 
     private void program() {
         eat(Tag.CLASS);
+        if (currentToken.getTag() != Tag.ID)
+            throw new SyntacticException(errorMsg(Tag.ID));
         String className = ((Word) currentToken).getLexeme();
         eat(Tag.ID);
         eat(Tag.LBRACE);
@@ -198,6 +200,8 @@ public class SyntacticAnalyser {
     }
 
     private void insertSymbol(String typeName) {
+        if (currentToken.getTag() != Tag.ID)
+            throw new SyntacticException(errorMsg(Tag.ID));
         String lexeme = ((Word) currentToken).getLexeme();
         int line = lexer.getCurrentLine();
         eat(Tag.ID);
