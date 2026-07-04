@@ -52,13 +52,12 @@ public class SyntacticAnalyserTest {
     }
 
     // -------------------------------------------------------------------------
-    // Helper
+    // Helpers — sintático
     // -------------------------------------------------------------------------
 
     /**
      * Cria um parser sobre a string de entrada e chama analyse().
      * Lança SyntacticException se a entrada for sintaticamente inválida.
-     * Para programas completos, envolva o corpo com o template de programa.
      */
     private static void parse(String input) {
         LexicalAnalyser lexer = new LexicalAnalyser(new StringReader(input));
@@ -74,6 +73,30 @@ public class SyntacticAnalyserTest {
     /** Atalho: envolve stmt-list num programa com declarações. */
     private static void parseProgramWithDecls(String decls, String stmts) {
         parse("class Test { " + decls + " { " + stmts + " } }");
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers — semântico
+    // -------------------------------------------------------------------------
+
+    /** Executa o parser e retorna a instância para inspeção semântica. */
+    private static SyntacticAnalyser parseForSemantic(String input) {
+        LexicalAnalyser lexer = new LexicalAnalyser(new StringReader(input));
+        SyntacticAnalyser parser = new SyntacticAnalyser(lexer);
+        parser.analyse();
+        return parser;
+    }
+
+    private static void assertSemanticOk(String decls, String stmts) {
+        SyntacticAnalyser p = parseForSemantic(
+            "class Test { " + decls + " { " + stmts + " } }");
+        assertTrue(!p.hasSemanticErrors(), "não deveria ter erros semânticos");
+    }
+
+    private static void assertSemanticError(String decls, String stmts) {
+        SyntacticAnalyser p = parseForSemantic(
+            "class Test { " + decls + " { " + stmts + " } }");
+        assertTrue(p.hasSemanticErrors(), "deveria ter erro semântico");
     }
 
     // -------------------------------------------------------------------------
@@ -458,6 +481,241 @@ public class SyntacticAnalyserTest {
     }
 
     // -------------------------------------------------------------------------
+    // H10 — Análise semântica: variáveis
+    // -------------------------------------------------------------------------
+
+    static void testH10_Variaveis() {
+        test("[H10] Variável declarada e usada corretamente", () ->
+            assertSemanticOk("int x;", "x := 1;"));
+
+        test("[H10] Variável não declarada na atribuição → erro", () ->
+            assertSemanticError("", "x := 1;"));
+
+        test("[H10] Variável não declarada no read → erro", () ->
+            assertSemanticError("", "read(x);"));
+
+        test("[H10] Variável não declarada em expressão → erro", () ->
+            assertSemanticError("int y;", "y := x + 1;"));
+
+        test("[H10] Redeclaração de variável → erro", () ->
+            assertSemanticError("int x; int x;", "x := 1;"));
+
+        test("[H10] Múltiplas variáveis declaradas e usadas", () ->
+            assertSemanticOk("int x, y, z;", "x := 1; y := 2; z := x + y;"));
+    }
+
+    // -------------------------------------------------------------------------
+    // H11 — Análise semântica: tipos na atribuição
+    // -------------------------------------------------------------------------
+
+    static void testH11_TiposAtribuicao() {
+        test("[H11] int := int → ok", () ->
+            assertSemanticOk("int x;", "x := 42;"));
+
+        test("[H11] float := float → ok", () ->
+            assertSemanticOk("float x;", "x := 3.14;"));
+
+        test("[H11] string := string → ok", () ->
+            assertSemanticOk("string x;", "x := \"ola\";"));
+
+        test("[H11] int := float → erro (sem coerção)", () ->
+            assertSemanticError("int x;", "x := 1.0;"));
+
+        test("[H11] float := int → erro (sem coerção)", () ->
+            assertSemanticError("float x;", "x := 1;"));
+
+        test("[H11] string := int → erro", () ->
+            assertSemanticError("string x;", "x := 1;"));
+
+        test("[H11] int := string → erro", () ->
+            assertSemanticError("int x;", "x := \"a\";"));
+
+        test("[H11] int := int var → ok", () ->
+            assertSemanticOk("int x, y;", "x := 1; y := x;"));
+
+        test("[H11] float := float var → ok", () ->
+            assertSemanticOk("float x, y;", "x := 1.5; y := x;"));
+    }
+
+    // -------------------------------------------------------------------------
+    // H12 — Análise semântica: tipos em expressões aritméticas
+    // -------------------------------------------------------------------------
+
+    static void testH12_TiposExpressoes() {
+        test("[H12] int + int = int → ok", () ->
+            assertSemanticOk("int x, y, z;", "z := x + y;"));
+
+        test("[H12] float + float = float → ok", () ->
+            assertSemanticOk("float x, y, z;", "z := x + y;"));
+
+        test("[H12] string + string = string (concatenação) → ok", () ->
+            assertSemanticOk("string x, y, z;", "z := x + y;"));
+
+        test("[H12] int + float → erro (tipos incompatíveis)", () ->
+            assertSemanticError("int x; float y; int z;", "z := x + y;"));
+
+        test("[H12] int * int = int → ok", () ->
+            assertSemanticOk("int x, y, z;", "z := x * y;"));
+
+        test("[H12] float * float = float → ok", () ->
+            assertSemanticOk("float x, y, z;", "z := x * y;"));
+
+        test("[H12] int * float → erro", () ->
+            assertSemanticError("int x; float y; float z;", "z := x * y;"));
+
+        test("[H12] int / int = float → ok (resultado é float)", () ->
+            assertSemanticOk("int x, y; float z;", "z := x / y;"));
+
+        test("[H12] int / int atribuído a int → erro (resultado é float)", () ->
+            assertSemanticError("int x, y, z;", "z := x / y;"));
+
+        test("[H12] int % int = int → ok", () ->
+            assertSemanticOk("int x, y, z;", "z := x % y;"));
+
+        test("[H12] float % float → erro (% só para int)", () ->
+            assertSemanticError("float x, y, z;", "z := x % y;"));
+
+        test("[H12] int % float → erro", () ->
+            assertSemanticError("int x; float y; int z;", "z := x % y;"));
+
+        test("[H12] negação unária em int → ok", () ->
+            assertSemanticOk("int x, y;", "y := -x;"));
+
+        test("[H12] negação unária em float → ok", () ->
+            assertSemanticOk("float x, y;", "y := -x;"));
+
+        test("[H12] negação unária em string → erro", () ->
+            assertSemanticError("string x, y;", "y := -x;"));
+    }
+
+    // -------------------------------------------------------------------------
+    // H13 — Análise semântica: condições e operadores lógicos
+    // -------------------------------------------------------------------------
+
+    static void testH13_Logico() {
+        test("[H13] Condição com relop (bool) → ok", () ->
+            assertSemanticOk("int x;", "if (x > 0) { x := 1; };"));
+
+        test("[H13] Condição sem relop (int) → erro", () ->
+            assertSemanticError("int x;", "if (x) { x := 1; };"));
+
+        test("[H13] Condição sem relop (string) → erro", () ->
+            assertSemanticError("string x;", "if (x) { x := \"a\"; };"));
+
+        test("[H13] do-while com condição bool → ok", () ->
+            assertSemanticOk("int x;", "do { x := x + 1; } while (x < 10);"));
+
+        test("[H13] do-while com condição int → erro", () ->
+            assertSemanticError("int x;", "do { x := x + 1; } while (x);"));
+
+        test("[H13] repeat-until com condição bool → ok", () ->
+            assertSemanticOk("int x;", "repeat { x := x + 1; } until (x >= 10);"));
+
+        test("[H13] repeat-until com condição int → erro", () ->
+            assertSemanticError("int x;", "repeat { x := x + 1; } until (x);"));
+
+        test("[H13] bool and bool → ok", () ->
+            assertSemanticOk("int x;", "if ((x > 0) and (x < 10)) { x := 1; };"));
+
+        test("[H13] bool or bool → ok", () ->
+            assertSemanticOk("int x;", "if ((x > 0) or (x < 10)) { x := 1; };"));
+
+        test("[H13] int and bool → erro", () ->
+            assertSemanticError("int x;", "if (x and (x > 0)) { x := 1; };"));
+
+        test("[H13] not bool → ok", () ->
+            assertSemanticOk("int x;", "if (not (x > 0)) { x := 1; };"));
+
+        test("[H13] not int → erro", () ->
+            assertSemanticError("int x, y;", "y := not x;"));
+    }
+
+    // -------------------------------------------------------------------------
+    // H14 — Análise semântica: integração completa
+    // -------------------------------------------------------------------------
+
+    static void testH14_IntegracaoSemantica() {
+        test("[H14] Programa completo válido (soma 1 a N)", () -> {
+            SyntacticAnalyser p = parseForSemantic(
+                "class SomaAteN {\n" +
+                "  int n, i, soma;\n" +
+                "  {\n" +
+                "    read(n);\n" +
+                "    soma := 0;\n" +
+                "    i := 1;\n" +
+                "    repeat {\n" +
+                "      soma := soma + i;\n" +
+                "      i := i + 1;\n" +
+                "    } until (i > n);\n" +
+                "    write(soma);\n" +
+                "  }\n" +
+                "}"
+            );
+            assertTrue(!p.hasSemanticErrors(), "não deveria ter erros semânticos");
+        });
+
+        test("[H14] Programa válido com if-else e float", () -> {
+            SyntacticAnalyser p = parseForSemantic(
+                "class Media {\n" +
+                "  float a, b, media;\n" +
+                "  {\n" +
+                "    read(a);\n" +
+                "    read(b);\n" +
+                "    media := (a + b) / 2.0;\n" +
+                "    if (media >= 6.0) {\n" +
+                "      write(\"Aprovado\");\n" +
+                "    } else {\n" +
+                "      write(\"Reprovado\");\n" +
+                "    };\n" +
+                "  }\n" +
+                "}"
+            );
+            assertTrue(!p.hasSemanticErrors(), "não deveria ter erros semânticos");
+        });
+
+        test("[H14] Atribuição int/int=float para float → ok", () -> {
+            SyntacticAnalyser p = parseForSemantic(
+                "class Divisao {\n" +
+                "  int a, b;\n" +
+                "  float resultado;\n" +
+                "  {\n" +
+                "    a := 10;\n" +
+                "    b := 3;\n" +
+                "    resultado := a / b;\n" +
+                "  }\n" +
+                "}"
+            );
+            assertTrue(!p.hasSemanticErrors(), "int/int deve resultar em float");
+        });
+
+        test("[H14] Concatenação de strings com write → ok", () -> {
+            SyntacticAnalyser p = parseForSemantic(
+                "class Concat {\n" +
+                "  string nome;\n" +
+                "  {\n" +
+                "    read(nome);\n" +
+                "    write(\"Ola, \" + nome);\n" +
+                "  }\n" +
+                "}"
+            );
+            assertTrue(!p.hasSemanticErrors(), "concatenação de string não deve gerar erro");
+        });
+
+        test("[H14] Programa com múltiplos erros semânticos → detecta erros", () -> {
+            SyntacticAnalyser p = parseForSemantic(
+                "class Erros {\n" +
+                "  int x;\n" +
+                "  {\n" +
+                "    y := 1;\n" +      // y não declarado
+                "    x := \"texto\";\n" + // tipo incompatível
+                "  }\n" +
+                "}"
+            );
+            assertTrue(p.hasSemanticErrors(), "deveria ter erros semânticos");
+        });
+    }
+
+    // -------------------------------------------------------------------------
     // main
     // -------------------------------------------------------------------------
 
@@ -488,10 +746,24 @@ public class SyntacticAnalyserTest {
         System.out.println("\n[ H8 — Read e Write ]");
         testH8_ReadWrite();
 
-        System.out.println("\n[ H9 — Integração ]");
+        System.out.println("\n[ H9 — Integração sintática ]");
         testH9_ProgramasCompletos();
 
+        System.out.println("\n[ H10 — Semântico: variáveis ]");
+        testH10_Variaveis();
+
+        System.out.println("\n[ H11 — Semântico: tipos na atribuição ]");
+        testH11_TiposAtribuicao();
+
+        System.out.println("\n[ H12 — Semântico: tipos em expressões ]");
+        testH12_TiposExpressoes();
+
+        System.out.println("\n[ H13 — Semântico: condições e operadores lógicos ]");
+        testH13_Logico();
+
+        System.out.println("\n[ H14 — Semântico: integração completa ]");
+        testH14_IntegracaoSemantica();
+
         System.out.printf("%n=== Resultado: %d aprovados, %d reprovados ===%n", passed, failed);
-        // Sem System.exit — ainda esperamos falhas (implementação pendente)
     }
 }
